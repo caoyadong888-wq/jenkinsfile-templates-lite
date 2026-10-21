@@ -1,0 +1,57 @@
+// 声明式流水线。主机名是示例。Check upstream docs.
+// pack-profile: simple
+// Directives: pipeline, agent, options, parameters, environment, stages, when, post.
+// skipDefaultCheckout, disableConcurrentBuilds, timeout, and logRotator are
+// Declarative options used widely. Check upstream docs for your Jenkins version.
+// choice uses the newline-separated string form. Check upstream docs for the list form.
+
+pipeline {
+    agent any
+    options {
+        disableConcurrentBuilds()
+        skipDefaultCheckout()
+        timeout(time: 20, unit: 'MINUTES')
+        buildDiscarder(logRotator(numToKeepStr: '10'))
+    }
+    parameters {
+        choice(name: 'PACK_ENV', choices: "staging\nproduction", description: 'Environment name recorded in the log')
+        string(name: 'PACK_DEPLOY_HOST', defaultValue: 'app.example.com', description: 'Host name recorded in the log. Example only.')
+        booleanParam(name: 'PACK_RUN_PACKAGE', defaultValue: true, description: 'When true, run the Package stage')
+    }
+    environment {
+        PACK_APP_NAME = 'shop'
+    }
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+                echo "app=${env.PACK_APP_NAME} env=${params.PACK_ENV} host=${params.PACK_DEPLOY_HOST}"
+            }
+        }
+        stage('Test') {
+            steps {
+                sh 'python3 -m pytest -q tests'
+            }
+        }
+        stage('Package') {
+            when {
+                expression { return params.PACK_RUN_PACKAGE }
+            }
+            steps {
+                sh 'python3 -m compileall -q src'
+                echo "package ${env.PACK_APP_NAME}"
+            }
+        }
+    }
+    post {
+        success {
+            echo "success ${env.PACK_APP_NAME} ${params.PACK_ENV}"
+        }
+        failure {
+            echo "failure ${env.PACK_APP_NAME} ${params.PACK_ENV}"
+        }
+        always {
+            echo "finished ${env.PACK_APP_NAME}"
+        }
+    }
+}
